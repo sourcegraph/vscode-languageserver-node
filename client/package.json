@@ -1,7 +1,7 @@
 {
-	"name": "vscode-languageclient",
+	"name": "@sourcegraph/vscode-languageclient",
 	"description": "VSCode Language client implementation",
-	"version": "3.0.4",
+	"version": "3.0.4-patch",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"engines": {
@@ -22,7 +22,7 @@
 		"@types/node": "^6.0.42"
 	},
 	"dependencies": {
-		"vscode-jsonrpc": "^3.0.3",
+		"@sourcegraph/vscode-jsonrpc": "^3.0.4-patch",
 		"vscode-languageserver-types": "^3.0.3"
 	},
 	"scripts": {

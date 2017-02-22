@@ -1,7 +1,7 @@
 {
-	"name": "vscode-jsonrpc",
+	"name": "@sourcegraph/vscode-jsonrpc",
 	"description": "A json rpc implementation over streams",
-	"version": "3.0.4",
+	"version": "3.0.4-patch",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
