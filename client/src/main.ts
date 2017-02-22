@@ -17,7 +17,7 @@ import {
 	NotificationType, NotificationType0,
 	NotificationHandler, NotificationHandler0, GenericNotificationHandler,
 	IPCMessageReader, IPCMessageWriter, StreamMessageReader, StreamMessageWriter,
-} from 'vscode-jsonrpc';
+} from '@sourcegraph/vscode-jsonrpc';
 
 import * as is from './utils/is';
 import * as electron from './utils/electron';

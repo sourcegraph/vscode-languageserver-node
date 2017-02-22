@@ -22,7 +22,7 @@ import {
 	NotificationType, NotificationType0,
 	NotificationHandler, NotificationHandler0, GenericNotificationHandler,
 	MessageReader, MessageWriter, Trace, Tracer, Event, Emitter
-} from 'vscode-jsonrpc';
+} from '@sourcegraph/vscode-jsonrpc';
 
 import {
 	WorkspaceEdit, Location
