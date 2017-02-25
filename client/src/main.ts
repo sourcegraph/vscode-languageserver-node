@@ -33,7 +33,7 @@ export { Converter as Protocol2CodeConverter } from './protocolConverter';
 
 import { BaseLanguageClient, LanguageClientOptions, MessageStream } from './client';
 
-export * from 'vscode-languageserver-types';
+export * from '@sourcegraph/vscode-languageserver-types';
 export * from './protocol';
 export * from './client';
 

@@ -12,8 +12,9 @@ import {
 	TextDocumentIdentifier, VersionedTextDocumentIdentifier, TextDocumentItem, TextDocumentSaveReason,
 	CompletionItem, CompletionList, Hover, SignatureHelp,
 	Definition, ReferenceContext, DocumentHighlight, DocumentSymbolParams,
+	ReferenceInformation, SymbolDescriptor,
 	SymbolInformation, CodeLens, CodeActionContext, FormattingOptions, DocumentLink
-} from 'vscode-languageserver-types';
+} from '@sourcegraph/vscode-languageserver-types';
 
 /**
  * A document filter denotes a document by different properties like
@@ -555,6 +556,10 @@ export interface ServerCapabilities {
 	 * The server provides find references support.
 	 */
 	referencesProvider?: boolean;
+	/**
+	 * The server provides workspace references exporting support.
+	 */
+	xworkspaceReferencesProvider?: boolean;
 	/**
 	 * The server provides document highlight support.
 	 */
@@ -1170,6 +1175,15 @@ export interface ReferenceParams extends TextDocumentPositionParams {
  */
 export namespace ReferencesRequest {
 	export const type = new RequestTypeWithStreamingResponse<ReferenceParams, Location[], Location[], void, TextDocumentRegistrationOptions>('textDocument/references');
+}
+
+export interface WorkspaceReferenceParams {
+	query: SymbolDescriptor;
+	hints: { [hint: string]: any }
+}
+
+export namespace WorkspaceReferencesRequest {
+	export const type = new RequestTypeWithStreamingResponse<WorkspaceReferenceParams, ReferenceInformation[], ReferenceInformation[], void, TextDocumentRegistrationOptions>('workspace/xreferences');
 }
 
 //---- Document Highlight ----------------------------------

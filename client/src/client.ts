@@ -13,6 +13,7 @@ import {
 	SymbolInformation as VSymbolInformation, CodeActionContext as VCodeActionContext, Command as VCommand, CodeLens as VCodeLens,
 	FormattingOptions as VFormattingOptions, TextEdit as VTextEdit, WorkspaceEdit as VWorkspaceEdit, MessageItem,
 	Hover as VHover,
+	SymbolDescriptor as VSymbolDescriptor, ReferenceInformation as VReferenceInformation,
 	DocumentLink as VDocumentLink, TextDocumentWillSaveEvent
 } from 'vscode';
 
@@ -25,8 +26,8 @@ import {
 } from '@sourcegraph/vscode-jsonrpc';
 
 import {
-	WorkspaceEdit, Location
-} from 'vscode-languageserver-types';
+	WorkspaceEdit, Location, ReferenceInformation
+} from '@sourcegraph/vscode-languageserver-types';
 
 
 import {
@@ -48,7 +49,7 @@ import {
 	PublishDiagnosticsNotification, PublishDiagnosticsParams,
 	CompletionRequest, CompletionResolveRequest, CompletionRegistrationOptions,
 	HoverRequest,
-	SignatureHelpRequest, SignatureHelpRegistrationOptions, DefinitionRequest, ReferencesRequest, DocumentHighlightRequest,
+	SignatureHelpRequest, SignatureHelpRegistrationOptions, DefinitionRequest, ReferencesRequest, WorkspaceReferencesRequest, DocumentHighlightRequest,
 	DocumentSymbolRequest, WorkspaceSymbolRequest,
 	CodeActionRequest, CodeActionParams,
 	CodeLensRequest, CodeLensResolveRequest, CodeLensRegistrationOptions,
@@ -75,7 +76,7 @@ export {
 export { Converter as Code2ProtocolConverter } from './codeConverter';
 export { Converter as Protocol2CodeConverter } from './protocolConverter';
 
-export * from 'vscode-languageserver-types';
+export * from '@sourcegraph/vscode-languageserver-types';
 export * from './protocol';
 
 interface IConnection {
@@ -1525,6 +1526,10 @@ export abstract class BaseLanguageClient {
 			new LanguageFeature<TextDocumentRegistrationOptions>((options) => this.createReferencesProvider(options))
 		);
 		this._registeredHandlers.set(
+			WorkspaceReferencesRequest.type.method,
+			new LanguageFeature<TextDocumentRegistrationOptions>((options) => this.createWorkspaceReferencesProvider(options))
+		);
+		this._registeredHandlers.set(
 			DocumentHighlightRequest.type.method,
 			new LanguageFeature<TextDocumentRegistrationOptions>((options) => this.createDocumentHighlightProvider(options))
 		);
@@ -1670,6 +1675,15 @@ export abstract class BaseLanguageClient {
 
 		if (this._capabilites.referencesProvider) {
 			provider = registeredHandlers.get(ReferencesRequest.type.method).register(
+				{ id: UUID.generateUuid(), registerOptions: Object.assign({}, selectorOptions) }
+			);
+			if (provider && this._providers) {
+				this._providers.push(provider);
+			}
+		}
+
+		if (this._capabilites.xworkspaceReferencesProvider) {
+			provider = registeredHandlers.get(WorkspaceReferencesRequest.type.method).register(
 				{ id: UUID.generateUuid(), registerOptions: Object.assign({}, selectorOptions) }
 			);
 			if (provider && this._providers) {
@@ -1883,6 +1897,43 @@ export abstract class BaseLanguageClient {
 					this._p2c.asReferences,
 					(error) => {
 						this.logFailedRequest(ReferencesRequest.type, error);
+						return Promise.resolve([]);
+					}
+				);
+			}
+		});
+	}
+
+	private createWorkspaceReferencesProvider(options: TextDocumentRegistrationOptions): Disposable {
+		return Languages.registerWorkspaceReferenceProvider(options.documentSelector!, {
+			provideWorkspaceReferences: (query: VSymbolDescriptor, hints: { [hint: string]: any }, token: CancellationToken, progress: ProgressCallback<VReferenceInformation[]>): Thenable<VReferenceInformation[]> => {
+				const knownReferences = new Set<string>();
+				const patch2Locations = (references: ReferenceInformation[]) => {
+					// Right now references contains the entire partial result up until this point.
+					// Since the data gets serialized over IPC to the main thread,
+					// only forward the new results as a performance optimization.
+					// TODO(nick): strip out bad locations.
+					const infos = this._p2c.asWorkspaceReferences(references);
+					const newInfos: VReferenceInformation[] = [];
+					infos.forEach((info) => {
+						const id = [
+							info.reference.uri.toString(),
+							info.reference.range.start.line,
+							info.reference.range.start.character,
+							info.reference.range.end.line,
+							info.reference.range.end.character
+						].join(":")
+						if (!knownReferences.has(id)) {
+							newInfos.push(info);
+						}
+						knownReferences.add(id);
+					});
+					progress(newInfos);
+				};
+				return this.sendRequestWithStreamingResponse(WorkspaceReferencesRequest.type, this._c2p.asWorkspaceReferenceParams(query, hints), token, patch2Locations).then(
+					this._p2c.asWorkspaceReferences,
+					(error) => {
+						this.logFailedRequest(WorkspaceReferencesRequest.type, error);
 						return Promise.resolve([]);
 					}
 				);

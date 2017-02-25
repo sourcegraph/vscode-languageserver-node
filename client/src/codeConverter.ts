@@ -5,7 +5,7 @@
 'use strict';
 
 import * as code from 'vscode';
-import * as types from 'vscode-languageserver-types';
+import * as types from '@sourcegraph/vscode-languageserver-types';
 import * as proto from './protocol';
 import * as is from './utils/is';
 import ProtocolCompletionItem from './protocolCompletionItem';
@@ -51,6 +51,8 @@ export interface Converter {
 	asTextEdit(edit: code.TextEdit): types.TextEdit;
 
 	asReferenceParams(textDocument: code.TextDocument, position: code.Position, options: { includeDeclaration: boolean; }): proto.ReferenceParams;
+
+	asWorkspaceReferenceParams(query: code.SymbolDescriptor, hints: { [hint: string]: any }): proto.WorkspaceReferenceParams;
 
 	asCodeActionContext(context: code.CodeActionContext): types.CodeActionContext;
 
@@ -319,6 +321,13 @@ export function createConverter(uriConverter?: URIConverter): Converter {
 		};
 	}
 
+	function asWorkspaceReferenceParams(query: code.SymbolDescriptor, hints: { [hint: string]: any }): proto.WorkspaceReferenceParams {
+		return {
+			query: query,
+			hints: hints
+		}
+	}
+
 	function asCodeActionContext(context: code.CodeActionContext): types.CodeActionContext {
 		if (context === void 0 || context === null) {
 			return context;
@@ -387,6 +396,7 @@ export function createConverter(uriConverter?: URIConverter): Converter {
 		asCompletionItem,
 		asTextEdit,
 		asReferenceParams,
+		asWorkspaceReferenceParams,
 		asCodeActionContext,
 		asCommand,
 		asCodeLens,

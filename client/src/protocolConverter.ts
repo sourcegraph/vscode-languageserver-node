@@ -5,7 +5,7 @@
 'use strict';
 
 import * as code from 'vscode';
-import * as ls from 'vscode-languageserver-types';
+import * as ls from '@sourcegraph/vscode-languageserver-types';
 import * as is from './utils/is';
 import ProtocolCompletionItem from './protocolCompletionItem';
 import ProtocolCodeLens from './protocolCodeLens';
@@ -67,6 +67,8 @@ export interface Converter {
 	asReferences(values: ls.Location[]): code.Location[];
 	asReferences(values: undefined | null): code.Location[] | undefined;
 	asReferences(values: ls.Location[] | undefined | null): code.Location[] | undefined;
+
+	asWorkspaceReferences(values: ls.ReferenceInformation[]): code.ReferenceInformation[];
 
 	asDocumentHighlightKind(item: number): code.DocumentHighlightKind;
 
@@ -325,6 +327,15 @@ export function createConverter(uriConverter?: URIConverter): Converter {
 		return values.map(location => asLocation(location));
 	}
 
+	function asWorkspaceReferences(values: ls.ReferenceInformation[]): code.ReferenceInformation[] {
+		return values.map(value => {
+			return {
+				reference: asLocation(value.reference),
+				symbol: value.symbol
+			}
+		})
+	}
+
 	function asDocumentHighlights(values: ls.DocumentHighlight[]): code.DocumentHighlight[];
 	function asDocumentHighlights(values: undefined | null): undefined;
 	function asDocumentHighlights(values: ls.DocumentHighlight[] | undefined | null): code.DocumentHighlight[] | undefined;
@@ -463,6 +474,7 @@ export function createConverter(uriConverter?: URIConverter): Converter {
 		asDefinitionResult,
 		asLocation,
 		asReferences,
+		asWorkspaceReferences,
 		asDocumentHighlights,
 		asDocumentHighlight,
 		asDocumentHighlightKind,
