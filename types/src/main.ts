@@ -962,6 +962,40 @@ export interface ReferenceContext {
 }
 
 /**
+ * Represents information about a programming construct that can be used to
+ * identify and locate the construct's symbol. The identification does not have
+ * to be unique, but it should be as unique as possible. It is up to the
+ * language server to define the schema of this object.
+ *
+ * In contrast to `SymbolInformation`, `SymbolDescriptor` includes more concrete,
+ * language-specific, metadata about the symbol.
+ */
+export interface SymbolDescriptor {
+	/**
+	 * A list of properties of a symbol that can be used to identify or locate
+	 * it.
+	 */
+	[attr: string]: any
+}
+
+/**
+ * Represents information about a reference to programming constructs like
+ * variables, classes, interfaces, etc.
+ */
+export interface ReferenceInformation {
+	/**
+	 * The location in the workspace where the `symbol` is referenced.
+	 */
+	reference: Location;
+
+	/**
+	 * Metadata about the symbol that can be used to identify or locate its
+	 * definition.
+	 */
+	symbol: SymbolDescriptor;
+}
+
+/**
  * A document highlight kind.
  */
 export namespace DocumentHighlightKind {
