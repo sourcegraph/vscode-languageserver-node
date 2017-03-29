@@ -469,7 +469,7 @@ class DidCloseTextDocumentFeature extends DocumentNotifiactions<DidCloseTextDocu
 	}
 
 	public unregister(id: string): void {
-		let selector = this._selectors.get(id) !;
+		let selector = this._selectors.get(id)!;
 		super.unregister(id);
 		let selectors = this._selectors.values();
 		this._syncedDocuments.forEach((textDocument) => {
@@ -1165,7 +1165,7 @@ export abstract class BaseLanguageClient {
 		let initOption = this._clientOptions.initializationOptions;
 		let initParams: InitializeParams = {
 			processId: typeof process !== 'undefined' ? process.pid : null,
-			rootPath: Workspace.rootPath ? Workspace.rootPath : null,
+			rootPath: Workspace.rootPath ? this._c2p.asUri(Uri.parse(Workspace.rootPath)) : null,
 			rootUri: Workspace.rootPath ? Uri.file(Workspace.rootPath).toString() : null,
 			capabilities: clientCapabilities,
 			initializationOptions: is.func(initOption) ? initOption() : initOption,
