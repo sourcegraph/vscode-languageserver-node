@@ -1,7 +1,7 @@
 {
 	"name": "@sourcegraph/vscode-languageclient",
 	"description": "VSCode Language client implementation",
-	"version": "3.0.4-patch3",
+	"version": "3.0.4-patch4",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"engines": {
