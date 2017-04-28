@@ -6,7 +6,7 @@
 
 import * as Is from './utils/is';
 
-import { RequestType, RequestType0, RequestTypeWithStreamingResponse, NotificationType, NotificationType0 } from 'vscode-jsonrpc';
+import { RequestType, RequestType0, RequestTypeWithStreamingResponse, NotificationType, NotificationType0 } from '@sourcegraph/vscode-jsonrpc';
 
 import {
 	TextDocumentContentChangeEvent, Position, Range, Location, Diagnostic, Command,

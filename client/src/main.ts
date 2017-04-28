@@ -18,7 +18,7 @@ import {
 	NotificationHandler, NotificationHandler0, GenericNotificationHandler,
 	IPCMessageReader, IPCMessageWriter, StreamMessageReader, StreamMessageWriter,
 	createClientPipeTransport, generateRandomPipeName,
-} from 'vscode-jsonrpc';
+} from '@sourcegraph/vscode-jsonrpc';
 
 
 import {
