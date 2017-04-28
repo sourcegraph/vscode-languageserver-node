@@ -22,13 +22,15 @@ import {
 import {
 	Message, MessageType as RPCMessageType, Logger, createMessageConnection, ErrorCodes, ResponseError,
 	RequestType, RequestType0, RequestHandler, RequestHandler0, GenericRequestHandler,
+	RequestTypeWithStreamingResponse,
+	PartialResultCallback,
 	NotificationType, NotificationType0,
 	NotificationHandler, NotificationHandler0, GenericNotificationHandler,
 	MessageReader, MessageWriter, Trace, Tracer, Event, Emitter,
-} from 'vscode-jsonrpc';
+} from '@sourcegraph/vscode-jsonrpc';
 
 import {
-	WorkspaceEdit
+	WorkspaceEdit, Location
 } from 'vscode-languageserver-types';
 
 
@@ -73,6 +75,7 @@ import * as UUID from './utils/uuid';
 export {
 	ResponseError, InitializeError, ErrorCodes,
 	RequestType, RequestType0, RequestHandler, RequestHandler0, GenericRequestHandler,
+	RequestTypeWithStreamingResponse,
 	NotificationType, NotificationType0, NotificationHandler, NotificationHandler0, GenericNotificationHandler
 }
 export { Converter as Code2ProtocolConverter } from './codeConverter';
@@ -90,6 +93,8 @@ interface IConnection {
 	sendRequest<R>(method: string, token?: CancellationToken): Thenable<R>;
 	sendRequest<R>(method: string, param: any, token?: CancellationToken): Thenable<R>;
 	sendRequest<R>(type: string | RPCMessageType, ...params: any[]): Thenable<R>;
+
+	sendRequestWithStreamingResponse<P, PC, R>(type: RequestTypeWithStreamingResponse<P, PC, R, any, any>, params: P, token?: CancellationToken, progress?: PartialResultCallback<PC>): Thenable<R>;
 
 	onRequest<R, E, RO>(type: RequestType0<R, E, RO>, handler: RequestHandler0<R, E>): void;
 	onRequest<P, R, E, RO>(type: RequestType<P, R, E, RO>, handler: RequestHandler<P, R, E>): void;
@@ -167,6 +172,7 @@ function createConnection(stream: MessageStream, errorHandler: ConnectionErrorHa
 		listen: (): void => connection.listen(),
 
 		sendRequest: <R>(type: string | RPCMessageType, ...params: any[]): Thenable<R> => connection.sendRequest(is.string(type) ? type : type.method, ...params),
+		sendRequestWithStreamingResponse: <P, PC, R>(type: RequestTypeWithStreamingResponse<P, PC, R, any, any>, params: P, token?: CancellationToken, progress?: PartialResultCallback<PC>): Thenable<R> => connection.sendRequestWithStreamingResponse(type, params, token, progress),
 		onRequest: <R, E>(type: string | RPCMessageType, handler: GenericRequestHandler<R, E>): void => connection.onRequest(is.string(type) ? type : type.method, handler),
 
 		sendNotification: (type: string | RPCMessageType, params?: any): void => connection.sendNotification(is.string(type) ? type : type.method, params),
@@ -946,6 +952,19 @@ export class LanguageClient {
 			return this._resolvedConnection!.sendRequest<R>(type, ...params);
 		} catch (error) {
 			this.error(`Sending request ${is.string(type) ? type : type.method} failed.`, error);
+			throw error;
+		}
+	}
+
+	public sendRequestWithStreamingResponse<P, PC, R>(type: RequestTypeWithStreamingResponse<P, PC, R, any, any>, params: P, token?: CancellationToken, progress?: PartialResultCallback<PC>): Thenable<R> {
+		if (!this.isConnectionActive()) {
+			throw new Error('Language client is not ready yet');
+		}
+		this.forceDocumentSync();
+		try {
+			return this._resolvedConnection!.sendRequestWithStreamingResponse(type, params, token, progress);
+		} catch (error) {
+			this.error(`Sending request ${type.method} failed.`, error);
 			throw error;
 		}
 	}
@@ -1906,8 +1925,30 @@ export class LanguageClient {
 
 	private createReferencesProvider(options: TextDocumentRegistrationOptions): Disposable {
 		return Languages.registerReferenceProvider(options.documentSelector!, {
-			provideReferences: (document: TextDocument, position: VPosition, options: { includeDeclaration: boolean; }, token: CancellationToken): Thenable<VLocation[]> => {
-				return this.sendRequest(ReferencesRequest.type, this._c2p.asReferenceParams(document, position, options), token).then(
+			provideReferences: (document: TextDocument, position: VPosition, options: { includeDeclaration: boolean; }, token: CancellationToken, progress: PartialResultCallback<VLocation[]>): Thenable<VLocation[]> => {
+				const knownReferences = new Set<string>();
+				const patch2Locations = (locations: Location[]) => {
+					// Right now references contains the entire partial result up until this point.
+					// Since the data gets serialized over IPC to the main thread,
+					// only forward the new results as a performance optimization.
+					const references = this._p2c.asReferences(locations);
+					const newReferences: VLocation[] = [];
+					references.forEach((reference) => {
+						const id = [
+							reference.uri.toString(),
+							reference.range.start.line,
+							reference.range.start.character,
+							reference.range.end.line,
+							reference.range.end.character
+						].join(":")
+						if (!knownReferences.has(id)) {
+							newReferences.push(reference);
+						}
+						knownReferences.add(id);
+					});
+					progress(newReferences);
+				};
+				return this.sendRequestWithStreamingResponse(ReferencesRequest.type, this._c2p.asReferenceParams(document, position, options), token, patch2Locations).then(
 					this._p2c.asReferences,
 					(error) => {
 						this.logFailedRequest(ReferencesRequest.type, error);

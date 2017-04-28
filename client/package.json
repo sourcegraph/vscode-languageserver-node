@@ -1,7 +1,7 @@
 {
 	"name": "@sourcegraph/vscode-languageclient",
 	"description": "VSCode Language client implementation",
-	"version": "3.3.0-alpha.1-sourcegraphpatch.4",
+	"version": "3.3.0-alpha.1-sourcegraphpatch.5",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"engines": {
@@ -22,13 +22,13 @@
 		"@types/node": "^6.0.68"
 	},
 	"dependencies": {
-		"vscode-jsonrpc": "^3.3.0-alpha.1",
+		"@sourcegraph/vscode-jsonrpc": "^3.3.0-alpha.1",
 		"vscode-languageserver-types": "^3.3.0-alpha.1"
 	},
 	"scripts": {
-		"prepublish": "node ./node_modules/vscode/bin/install && tsc -p ./src",
+		"prepublish": "tsc -p ./src",
 		"compile": "tsc -p ./src",
 		"watch": "tsc -w -p ./src",
-		"update-vscode": "node ./node_modules/vscode/bin/install"
+		"update-vscode": ""
 	}
 }

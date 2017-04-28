@@ -1,5 +1,5 @@
 {
-	"name": "vscode-jsonrpc",
+	"name": "@sourcegraph/vscode-jsonrpc",
 	"description": "A json rpc implementation over streams",
 	"version": "3.3.0-alpha.1",
 	"author": "Microsoft Corporation",
@@ -16,6 +16,9 @@
 	},
 	"main": "./lib/main.js",
 	"typings": "./lib/main.d.ts",
+	"dependencies": {
+        "fast-json-patch": "^1.1.9"
+    },
 	"devDependencies": {
 		"mocha": "^3.2.0",
 		"typescript": "^2.3.0",
