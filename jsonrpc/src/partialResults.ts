@@ -43,7 +43,7 @@ export interface PartialResultHandler<T> {
 	 * The cumulative partial result value that has been
 	 * constructed by applying all JSON Patch operations.
 	 */
-	partialValue: T;
+	partialValue?: T;
 }
 
 /**
