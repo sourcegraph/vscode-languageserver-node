@@ -539,7 +539,7 @@ function _createMessageConnection(messageReader: MessageReader, messageWriter: M
 			notificationHandler = (params: PartialResultParams) => {
 				const handler = partialResultHandlers.get(String(params.id));
 				if (handler) {
-					jsonpatch.apply(handler.partialValue, params.patch, false);
+					handler.partialValue = jsonpatch.applyPatch(handler.partialValue, params.patch);
 					handler.callback(handler.partialValue);
 				}
 			}
@@ -840,13 +840,6 @@ function _createMessageConnection(messageReader: MessageReader, messageWriter: M
 				if (progress) {
 					partialResultHandlers.set(String(id), {
 						callback: progress,
-
-						// TODO(nick): This initial array value is a hack because the JSON Patch library that we are using
-						// does not support changing the type of the root document.
-						// See https://github.com/Starcounter-Jack/JSON-Patch/issues/147
-						// Since our first use-case is streaming references, and the type of that response is an array,
-						// initialize the partial result to an empty array.
-						partialValue: [],
 					});
 				}
 				if (responsePromise) {
