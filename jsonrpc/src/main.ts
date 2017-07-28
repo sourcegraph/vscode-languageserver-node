@@ -10,6 +10,7 @@ import * as Is from './is';
 import {
 	Message, MessageType,
 	RequestMessage, RequestType, isRequestMessage,
+	RequestTypeWithStreamingResponse,
 	RequestType0, RequestType1, RequestType2, RequestType3, RequestType4,
 	RequestType5, RequestType6, RequestType7, RequestType8, RequestType9,
 	ResponseMessage, isResponseMessage, ResponseError, ErrorCodes,
@@ -23,12 +24,17 @@ import { MessageWriter, StreamMessageWriter, IPCMessageWriter, SocketMessageWrit
 import { Disposable, Event, Emitter } from './events';
 import { CancellationTokenSource, CancellationToken } from './cancellation';
 import { LinkedMap } from './linkedMap';
+import { PartialResultNotification, PartialResultCallback, PartialResultParams, PartialResultHandler } from './partialResults';
+
+import * as jsonpatch from 'fast-json-patch';
 
 export {
 	Message, MessageType, ErrorCodes, ResponseError,
 	RequestMessage, RequestType,
 	RequestType0, RequestType1, RequestType2, RequestType3, RequestType4,
 	RequestType5, RequestType6, RequestType7, RequestType8, RequestType9,
+	RequestTypeWithStreamingResponse,
+	PartialResultCallback,
 	NotificationMessage, NotificationType,
 	NotificationType0, NotificationType1, NotificationType2, NotificationType3, NotificationType4,
 	NotificationType5, NotificationType6, NotificationType7, NotificationType8, NotificationType9,
@@ -271,6 +277,18 @@ export interface MessageConnection {
 	sendRequest<P1, P2, P3, P4, P5, P6, P7, P8, P9, R, E, RO>(type: RequestType9<P1, P2, P3, P4, P5, P6, P7, P8, P9, R, E, RO>, p1: P1, p2: P2, p3: P3, p4: P4, p5: P5, p6: P6, p7: P7, p8: P8, p9: P9, token?: CancellationToken): Thenable<R>;
 	sendRequest<R>(method: string, ...params: any[]): Thenable<R>;
 
+	/**
+	 * Handles logic that is shared between sendRequest and sendRequestWithStreamingResponse.
+	 * @sourcegraph
+	 */
+	sendRequestHelper<R, PC>(method: string, params: any, token?: CancellationToken, progress?: PartialResultCallback<PC>): Thenable<R>;
+
+	/**
+	 * Sends a request and registers a handler for streamed partial results.
+	 * @sourcegraph
+	 */
+	sendRequestWithStreamingResponse<P, PC, R>(type: RequestTypeWithStreamingResponse<P, PC, R, any, any>, params: P, token?: CancellationToken, progress?: PartialResultCallback<PC>): Thenable<R>;
+
 	onRequest<R, E, RO>(type: RequestType0<R, E, RO>, handler: RequestHandler0<R, E>): void;
 	onRequest<P, R, E, RO>(type: RequestType<P, R, E, RO>, handler: RequestHandler<P, R, E>): void;
 	onRequest<P1, R, E, RO>(type: RequestType1<P1, R, E, RO>, handler: RequestHandler1<P1, R, E>): void;
@@ -357,7 +375,7 @@ function _createMessageConnection(messageReader: MessageReader, messageWriter: M
 	let starNotificationHandler: StarNotificationHandler | undefined = undefined;
 	let notificationHandlers: { [name: string]: NotificationHandlerElement | undefined } = Object.create(null);
 
-	let  timer:  NodeJS.Timer | undefined;
+	let timer: NodeJS.Timer | undefined;
 	let messageQueue: MessageQueue = new LinkedMap<string, Message>();
 	let responsePromises: { [name: string]: ResponsePromise } = Object.create(null);
 	let requestTokens: { [id: string]: CancellationTokenSource } = Object.create(null);
@@ -371,6 +389,7 @@ function _createMessageConnection(messageReader: MessageReader, messageWriter: M
 	let unhandledNotificationEmitter: Emitter<NotificationMessage> = new Emitter<NotificationMessage>();
 
 	let disposeEmitter: Emitter<void> = new Emitter<void>();
+	let partialResultHandlers = new Map<String, PartialResultHandler<any>>();
 
 	function createRequestQueueKey(id: string | number): string {
 		return 'req-' + id.toString();
@@ -615,6 +634,7 @@ function _createMessageConnection(messageReader: MessageReader, messageWriter: M
 			}
 		} else {
 			let key = String(responseMessage.id);
+			partialResultHandlers.delete(key);
 			let responsePromise = responsePromises[key];
 			traceReceivedResponse(responseMessage, responsePromise);
 			if (responsePromise) {
@@ -655,6 +675,15 @@ function _createMessageConnection(messageReader: MessageReader, messageWriter: M
 					source.cancel();
 				}
 			}
+		} else if (message.method === PartialResultNotification.type.method) {
+			notificationHandler = (params: PartialResultParams) => {
+				const handler = partialResultHandlers.get(String(params.id));
+				if (handler) {
+					jsonpatch.applyPatch(handler.partialValue, params.patch, false);
+					handler.callback(handler.partialValue);
+				}
+			}
+
 		} else {
 			let element = notificationHandlers[message.method];
 			if (element) {
@@ -893,7 +922,7 @@ function _createMessageConnection(messageReader: MessageReader, messageWriter: M
 				}
 			}
 		},
-		sendRequest: <R, E>(type: string | MessageType, ...params: any[]) => {
+		sendRequest: <R, PC>(type: string | MessageType, ...params: any[]) => {
 			throwIfClosedOrDisposed();
 			throwIfNotListening();
 
@@ -935,14 +964,16 @@ function _createMessageConnection(messageReader: MessageReader, messageWriter: M
 				let numberOfParams = type.numberOfParams;
 				token = CancellationToken.is(params[numberOfParams]) ? params[numberOfParams] : undefined;
 			}
-
+			return connection.sendRequestHelper<R, PC>(method, messageParams, token);
+		},
+		sendRequestHelper: <R, PC>(method: string, params: any, token?: CancellationToken, progress?: PartialResultCallback<PC>) => {
 			let id = sequenceNumber++;
-			let result = new Promise<R | ResponseError<E>>((resolve, reject) => {
+			let result = new Promise<R>((resolve, reject) => {
 				let requestMessage: RequestMessage = {
 					jsonrpc: version,
 					id: id,
 					method: method,
-					params: messageParams
+					params: params
 				}
 				let responsePromise: ResponsePromise | null = { method: method, timerStart: Date.now(), resolve, reject };
 				traceSendingRequest(requestMessage);
@@ -952,6 +983,18 @@ function _createMessageConnection(messageReader: MessageReader, messageWriter: M
 					// Writing the message failed. So we need to reject the promise.
 					responsePromise.reject(new ResponseError<void>(ErrorCodes.MessageWriteError, e.message ? e.message : 'Unknown reason'));
 					responsePromise = null;
+				}
+				if (progress) {
+					partialResultHandlers.set(String(id), {
+						callback: progress,
+
+						// TODO(nick): This initial array value is a hack because the JSON Patch library that we are using
+						// does not support changing the type of the root document.
+						// See https://github.com/Starcounter-Jack/JSON-Patch/issues/147
+						// Since our first use-case is streaming references, and the type of that response is an array,
+						// initialize the partial result to an empty array.
+						partialValue: [],
+					});
 				}
 				if (responsePromise) {
 					responsePromises[String(id)] = responsePromise;
@@ -963,6 +1006,9 @@ function _createMessageConnection(messageReader: MessageReader, messageWriter: M
 				});
 			}
 			return result;
+		},
+		sendRequestWithStreamingResponse: <P, PC, R>(type: RequestTypeWithStreamingResponse<P, PC, R, any, any>, params: P, token?: CancellationToken, progress?: PartialResultCallback<PC>) => {
+			return connection.sendRequestHelper(type.method, params, token, progress);
 		},
 		onRequest: <R, E>(type: string | MessageType | StarRequestHandler, handler?: GenericRequestHandler<R, E>): void => {
 			throwIfClosedOrDisposed();
@@ -1005,6 +1051,7 @@ function _createMessageConnection(messageReader: MessageReader, messageWriter: M
 			responsePromises = Object.create(null);
 			requestTokens = Object.create(null);
 			messageQueue = new LinkedMap<string, Message>();
+			partialResultHandlers.clear();
 			// Test for backwards compatibility
 			if (Is.func(messageWriter.dispose)) {
 				messageWriter.dispose();
