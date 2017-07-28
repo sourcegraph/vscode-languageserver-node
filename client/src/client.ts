@@ -1429,8 +1429,8 @@ export abstract class BaseLanguageClient {
 		let initOption = this._clientOptions.initializationOptions;
 		let initParams: InitializeParams = {
 			processId: process.pid,
-			rootPath: Workspace.rootPath ? Workspace.rootPath : null,
-			rootUri: Workspace.rootPath ? Uri.file(Workspace.rootPath).toString() : null,
+			rootPath: Workspace.rootPath ? this._c2p.asUri(Uri.parse(Workspace.rootPath)) : null,
+			rootUri: Workspace.rootPath ? this._c2p.asUri(Uri.parse(Workspace.rootPath)) : null,
 			capabilities: clientCapabilities,
 			initializationOptions: is.func(initOption) ? initOption() : initOption,
 			trace: Trace.toString(this._trace)
