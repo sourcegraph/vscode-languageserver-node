@@ -3,10 +3,10 @@
 
 
 "@sourcegraph/vscode-jsonrpc@^3.3.1-sourcegraph-20170727-0":
-  version "3.3.0-alpha.1"
-  resolved "https://registry.yarnpkg.com/@sourcegraph/vscode-jsonrpc/-/vscode-jsonrpc-3.3.0-alpha.1.tgz#ebc901aa477258b262de90cfcf22752673cd0d2f"
+  version "3.3.1-sourcegraph-20170727-0"
+  resolved "https://registry.yarnpkg.com/@sourcegraph/vscode-jsonrpc/-/vscode-jsonrpc-3.3.1-sourcegraph-20170727-0.tgz#413cdaa26a3046b8e808b5834d9a31d9ad72098a"
   dependencies:
-    fast-json-patch "^1.1.9"
+    fast-json-patch "^2.0.4"
 
 "@types/node@^6.0.81":
   version "6.0.85"
@@ -234,6 +234,10 @@ deep-assign@^1.0.0:
   dependencies:
     is-obj "^1.0.0"
 
+deep-equal@^1.0.1:
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/deep-equal/-/deep-equal-1.0.1.tgz#f5d260292b660e084eff4cdbc9f08ad3247448b5"
+
 delayed-stream@~1.0.0:
   version "1.0.0"
   resolved "https://registry.yarnpkg.com/delayed-stream/-/delayed-stream-1.0.0.tgz#df3ae199acadfb7d440aaae0b29e2272b24ec619"
@@ -328,9 +332,11 @@ fancy-log@^1.1.0:
     chalk "^1.1.1"
     time-stamp "^1.0.0"
 
-fast-json-patch@^1.1.9:
-  version "1.2.2"
-  resolved "https://registry.yarnpkg.com/fast-json-patch/-/fast-json-patch-1.2.2.tgz#d377d97c6911dbdd2a1c80bfacda048a4f83bbf9"
+fast-json-patch@^2.0.4:
+  version "2.0.4"
+  resolved "https://registry.yarnpkg.com/fast-json-patch/-/fast-json-patch-2.0.4.tgz#6aa2b2918ff6f5a16daddf2745547a9ccf36a9fb"
+  dependencies:
+    deep-equal "^1.0.1"
 
 fd-slicer@~1.0.1:
   version "1.0.1"
