@@ -441,6 +441,8 @@ export interface Middleware {
 	provideRenameEdits?: (document: TextDocument, position: VPosition, newName: string, token: CancellationToken, next: ProvideRenameEditsSignature) => ProviderResult<VWorkspaceEdit>;
 	provideDocumentLinks?: (document: TextDocument, token: CancellationToken, next: ProvideDocumentLinksSignature) => ProviderResult<VDocumentLink[]>;
 	resolveDocumentLink?: (link: VDocumentLink, token: CancellationToken, next: ResolveDocumentLinkSignature) => ProviderResult<VDocumentLink>;
+
+	onShowMessage?: (params: ShowMessageParams, next: NotificationHandler<ShowMessageParams>) => void;
 }
 
 export interface LanguageClientOptions {
@@ -1364,7 +1366,8 @@ export abstract class BaseLanguageClient {
 						this.outputChannel.appendLine(message.message);
 				}
 			});
-			connection.onShowMessage((message) => {
+
+			const defaultOnShowMessage = (message: ShowMessageParams) => {
 				switch (message.type) {
 					case MessageType.Error:
 						Window.showErrorMessage(message.message);
@@ -1378,7 +1381,11 @@ export abstract class BaseLanguageClient {
 					default:
 						Window.showInformationMessage(message.message);
 				}
-			});
+			};
+			const mw = this._clientOptions.middleware.onShowMessage;
+			const onShowMessage = mw ? (message: ShowMessageParams) => mw(message, defaultOnShowMessage) : defaultOnShowMessage;
+			connection.onShowMessage(onShowMessage);
+
 			connection.onRequest(ShowMessageRequest.type, (params) => {
 				let messageFunc: <T extends MessageItem>(message: string, ...items: T[]) => Thenable<T>;
 				switch (params.type) {
