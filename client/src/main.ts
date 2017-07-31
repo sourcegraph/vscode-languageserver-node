@@ -21,7 +21,7 @@ import {
 	StreamMessageReader, StreamMessageWriter,
 	IPCMessageReader, IPCMessageWriter,
 	createClientPipeTransport, generateRandomPipeName
-} from 'vscode-jsonrpc';
+} from '@sourcegraph/vscode-jsonrpc';
 
 import * as is from './utils/is';
 import * as electron from './utils/electron';
@@ -189,7 +189,7 @@ export class LanguageClient extends BaseLanguageClient {
 				json = runDebug.run;
 			}
 		} else {
-			json = server;
+			json = server as NodeModule;
 		}
 		if (json.module) {
 			let node: NodeModule = <NodeModule>json;
@@ -275,7 +275,7 @@ export class LanguageClient extends BaseLanguageClient {
 								}
 							}
 						});
-					}  else if (transport === TransportKind.pipe) {
+					} else if (transport === TransportKind.pipe) {
 						createClientPipeTransport(pipeName!).then((transport) => {
 							electron.fork(node.module, args || [], options, (error, cp) => {
 								if (error || !cp) {
@@ -285,7 +285,7 @@ export class LanguageClient extends BaseLanguageClient {
 									cp.stderr.on('data', data => this.outputChannel.append(is.string(data) ? data : data.toString(encoding)));
 									cp.stdout.on('data', data => this.outputChannel.append(is.string(data) ? data : data.toString(encoding)));
 									transport.onConnected().then((protocol) => {
-										resolve({ reader: protocol[0], writer: protocol[1]});
+										resolve({ reader: protocol[0], writer: protocol[1] });
 									});
 								}
 							});

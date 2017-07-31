@@ -22,13 +22,15 @@ import {
 import {
 	Message, MessageType as RPCMessageType, Logger, createMessageConnection, ErrorCodes, ResponseError,
 	RequestType, RequestType0, RequestHandler, RequestHandler0, GenericRequestHandler,
+	RequestTypeWithStreamingResponse,
+	PartialResultCallback,
 	NotificationType, NotificationType0,
 	NotificationHandler, NotificationHandler0, GenericNotificationHandler,
 	MessageReader, MessageWriter, Trace, Tracer, Event, Emitter
-} from 'vscode-jsonrpc';
+} from '@sourcegraph/vscode-jsonrpc';
 
 import {
-	WorkspaceEdit
+	WorkspaceEdit, Location
 } from 'vscode-languageserver-types';
 
 
@@ -74,6 +76,7 @@ import * as UUID from './utils/uuid';
 export {
 	ResponseError, InitializeError, ErrorCodes,
 	RequestType, RequestType0, RequestHandler, RequestHandler0, GenericRequestHandler,
+	RequestTypeWithStreamingResponse,
 	NotificationType, NotificationType0, NotificationHandler, NotificationHandler0, GenericNotificationHandler
 }
 export { Converter as Code2ProtocolConverter } from './codeConverter';
@@ -91,6 +94,8 @@ interface IConnection {
 	sendRequest<R>(method: string, token?: CancellationToken): Thenable<R>;
 	sendRequest<R>(method: string, param: any, token?: CancellationToken): Thenable<R>;
 	sendRequest<R>(type: string | RPCMessageType, ...params: any[]): Thenable<R>;
+
+	sendRequestWithStreamingResponse<P, PC, R>(type: RequestTypeWithStreamingResponse<P, PC, R, any, any>, params: P, token?: CancellationToken, progress?: PartialResultCallback<PC>): Thenable<R>;
 
 	onRequest<R, E, RO>(type: RequestType0<R, E, RO>, handler: RequestHandler0<R, E>): void;
 	onRequest<P, R, E, RO>(type: RequestType<P, R, E, RO>, handler: RequestHandler<P, R, E>): void;
@@ -146,7 +151,7 @@ class ConsoleLogger implements Logger {
 }
 
 interface ConnectionErrorHandler {
-	(error: Error, message: Message, count: number): void;
+	(error: Error, message: Message | undefined, count: number | undefined): void;
 }
 
 interface ConnectionCloseHandler {
@@ -164,6 +169,7 @@ function createConnection(input: any, output: any, errorHandler: ConnectionError
 		listen: (): void => connection.listen(),
 
 		sendRequest: <R>(type: string | RPCMessageType, ...params: any[]): Thenable<R> => connection.sendRequest(is.string(type) ? type : type.method, ...params),
+		sendRequestWithStreamingResponse: <P, PC, R>(type: RequestTypeWithStreamingResponse<P, PC, R, any, any>, params: P, token?: CancellationToken, progress?: PartialResultCallback<PC>): Thenable<R> => connection.sendRequestWithStreamingResponse(type, params, token, progress),
 		onRequest: <R, E>(type: string | RPCMessageType, handler: GenericRequestHandler<R, E>): void => connection.onRequest(is.string(type) ? type : type.method, handler),
 
 		sendNotification: (type: string | RPCMessageType, params?: any): void => connection.sendNotification(is.string(type) ? type : type.method, params),
@@ -354,7 +360,7 @@ export interface ProvideDefinitionSignature {
 }
 
 export interface ProvideReferencesSignature {
-	(document: TextDocument, position: VPosition, options: { includeDeclaration: boolean; }, token: CancellationToken): ProviderResult<VLocation[]>;
+	(document: TextDocument, position: VPosition, options: { includeDeclaration: boolean; }, token: CancellationToken, progress: PartialResultCallback<VLocation[]>): ProviderResult<VLocation[]>;
 }
 
 export interface ProvideDocumentHighlightsSignature {
@@ -422,7 +428,7 @@ export interface Middleware {
 	provideHover?: (document: TextDocument, position: VPosition, token: CancellationToken, next: ProvideHoverSignature) => ProviderResult<VHover>;
 	provideSignatureHelp?: (document: TextDocument, position: VPosition, token: CancellationToken, next: ProvideSignatureHelpSignature) => ProviderResult<VSignatureHelp>;
 	provideDefinition?: (document: TextDocument, position: VPosition, token: CancellationToken, next: ProvideDefinitionSignature) => ProviderResult<VDefinition>;
-	provideReferences?: (document: TextDocument, position: VPosition, options: { includeDeclaration: boolean; }, token: CancellationToken, next: ProvideReferencesSignature) => ProviderResult<VLocation[]>;
+	provideReferences?: (document: TextDocument, position: VPosition, options: { includeDeclaration: boolean; }, token: CancellationToken, progress: PartialResultCallback<VLocation[]>, next: ProvideReferencesSignature) => ProviderResult<VLocation[]>;
 	provideDocumentHighlights?: (document: TextDocument, position: VPosition, token: CancellationToken, next: ProvideDocumentHighlightsSignature) => ProviderResult<VDocumentHighlight[]>;
 	provideDocumentSymbols?: (document: TextDocument, token: CancellationToken, next: ProvideDocumentSymbolsSignature) => ProviderResult<VSymbolInformation[]>;
 	provideWorkspaceSymbols?: (query: string, token: CancellationToken, next: ProvideWorkspaceSymbolsSignature) => ProviderResult<VSymbolInformation[]>;
@@ -435,6 +441,8 @@ export interface Middleware {
 	provideRenameEdits?: (document: TextDocument, position: VPosition, newName: string, token: CancellationToken, next: ProvideRenameEditsSignature) => ProviderResult<VWorkspaceEdit>;
 	provideDocumentLinks?: (document: TextDocument, token: CancellationToken, next: ProvideDocumentLinksSignature) => ProviderResult<VDocumentLink[]>;
 	resolveDocumentLink?: (link: VDocumentLink, token: CancellationToken, next: ResolveDocumentLinkSignature) => ProviderResult<VDocumentLink>;
+
+	onShowMessage?: (params: ShowMessageParams, next: NotificationHandler<ShowMessageParams>) => void;
 }
 
 export interface LanguageClientOptions {
@@ -676,7 +684,7 @@ class DidChangeTextDocumentFeature implements FeatureHandler<TextDocumentChangeR
 						this._client.sendNotification(DidChangeTextDocumentNotification.type, params);
 					}
 				} else if (changeData.syncKind === TextDocumentSyncKind.Full) {
-					let didChange: (event:TextDocumentChangeEvent) => void = (event) => {
+					let didChange: (event: TextDocumentChangeEvent) => void = (event) => {
 						if (this._changeDelayer) {
 							if (this._changeDelayer.uri !== event.document.uri.toString()) {
 								// Use this force delivery to track boolean state. Otherwise we might call two times.
@@ -1155,6 +1163,19 @@ export abstract class BaseLanguageClient {
 		}
 	}
 
+	public sendRequestWithStreamingResponse<P, PC, R>(type: RequestTypeWithStreamingResponse<P, PC, R, any, any>, params: P, token?: CancellationToken, progress?: PartialResultCallback<PC>): Thenable<R> {
+		if (!this.isConnectionActive()) {
+			throw new Error('Language client is not ready yet');
+		}
+		this.forceDocumentSync();
+		try {
+			return this._resolvedConnection!.sendRequestWithStreamingResponse(type, params, token, progress);
+		} catch (error) {
+			this.error(`Sending request ${type.method} failed.`, error);
+			throw error;
+		}
+	}
+
 	public onRequest<R, E, RO>(type: RequestType0<R, E, RO>, handler: RequestHandler0<R, E>): void;
 	public onRequest<P, R, E, RO>(type: RequestType<P, R, E, RO>, handler: RequestHandler<P, R, E>): void;
 	public onRequest<R, E>(method: string, handler: GenericRequestHandler<R, E>): void;
@@ -1345,7 +1366,8 @@ export abstract class BaseLanguageClient {
 						this.outputChannel.appendLine(message.message);
 				}
 			});
-			connection.onShowMessage((message) => {
+
+			const defaultOnShowMessage = (message: ShowMessageParams) => {
 				switch (message.type) {
 					case MessageType.Error:
 						Window.showErrorMessage(message.message);
@@ -1359,7 +1381,11 @@ export abstract class BaseLanguageClient {
 					default:
 						Window.showInformationMessage(message.message);
 				}
-			});
+			};
+			const mw = this._clientOptions.middleware.onShowMessage;
+			const onShowMessage = mw ? (message: ShowMessageParams) => mw(message, defaultOnShowMessage) : defaultOnShowMessage;
+			connection.onShowMessage(onShowMessage);
+
 			connection.onRequest(ShowMessageRequest.type, (params) => {
 				let messageFunc: <T extends MessageItem>(message: string, ...items: T[]) => Thenable<T>;
 				switch (params.type) {
@@ -1410,8 +1436,8 @@ export abstract class BaseLanguageClient {
 		let initOption = this._clientOptions.initializationOptions;
 		let initParams: InitializeParams = {
 			processId: process.pid,
-			rootPath: Workspace.rootPath ? Workspace.rootPath : null,
-			rootUri: Workspace.rootPath ? Uri.file(Workspace.rootPath).toString() : null,
+			rootPath: Workspace.rootPath ? this._c2p.asUri(Uri.parse(Workspace.rootPath)) : null,
+			rootUri: Workspace.rootPath ? this._c2p.asUri(Uri.parse(Workspace.rootPath)) : null,
 			capabilities: clientCapabilities,
 			initializationOptions: is.func(initOption) ? initOption() : initOption,
 			trace: Trace.toString(this._trace)
@@ -1553,6 +1579,9 @@ export abstract class BaseLanguageClient {
 			handler.dispose();
 		}
 		this._registeredHandlers.clear();
+		if (this._outputChannel) {
+			this._outputChannel.dispose();
+		}
 		if (diagnostics && this._diagnostics) {
 			this._diagnostics.dispose();
 			this._diagnostics = undefined;
@@ -2090,8 +2119,30 @@ export abstract class BaseLanguageClient {
 	}
 
 	private createReferencesProvider(options: TextDocumentRegistrationOptions): Disposable {
-		let providerReferences: ProvideReferencesSignature = (document, position, options, token) => {
-			return this.sendRequest(ReferencesRequest.type, this._c2p.asReferenceParams(document, position, options), token).then(
+		let providerReferences: ProvideReferencesSignature = (document, position, options, token, progress) => {
+			const knownReferences = new Set<string>();
+			const patch2Locations = (locations: Location[]) => {
+				// Right now references contains the entire partial result up until this point.
+				// Since the data gets serialized over IPC to the main thread,
+				// only forward the new results as a performance optimization.
+				const references = this._p2c.asReferences(locations);
+				const newReferences: VLocation[] = [];
+				references.forEach((reference) => {
+					const id = [
+						reference.uri.toString(),
+						reference.range.start.line,
+						reference.range.start.character,
+						reference.range.end.line,
+						reference.range.end.character
+					].join(":")
+					if (!knownReferences.has(id)) {
+						newReferences.push(reference);
+					}
+					knownReferences.add(id);
+				});
+				progress(newReferences);
+			};
+			return this.sendRequestWithStreamingResponse(ReferencesRequest.type, this._c2p.asReferenceParams(document, position, options), token, patch2Locations).then(
 				this._p2c.asReferences,
 				(error) => {
 					this.logFailedRequest(ReferencesRequest.type, error);
@@ -2101,10 +2152,10 @@ export abstract class BaseLanguageClient {
 		};
 		let middleware = this._clientOptions.middleware;
 		return Languages.registerReferenceProvider(options.documentSelector!, {
-			provideReferences: (document: TextDocument, position: VPosition, options: { includeDeclaration: boolean; }, token: CancellationToken): ProviderResult<VLocation[]> => {
+			provideReferences: (document: TextDocument, position: VPosition, options: { includeDeclaration: boolean; }, token: CancellationToken, progress: PartialResultCallback<VLocation[]>): ProviderResult<VLocation[]> => {
 				return middleware.provideReferences
-					? middleware.provideReferences(document, position, options, token, providerReferences)
-					: providerReferences(document, position, options, token)
+					? middleware.provideReferences(document, position, options, token, progress, providerReferences)
+					: providerReferences(document, position, options, token, progress)
 			}
 		});
 	}

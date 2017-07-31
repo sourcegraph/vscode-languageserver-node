@@ -176,6 +176,17 @@ export class RequestType<P, R, E, RO> extends AbstractMessageType {
 	}
 }
 
+/**
+ * A request that streams results as they become available.
+ * @sourcegraph
+ */
+export class RequestTypeWithStreamingResponse<Params, ProgressCallback, Result, Error, RegistrationOptions> extends AbstractMessageType {
+	private _?: [Params, ProgressCallback, Result, Error, RegistrationOptions, _EM];
+	constructor(method: string) {
+		super(method, 1);
+		this._ = undefined;
+	}
+}
 
 export class RequestType1<P1, R, E, RO> extends AbstractMessageType {
 	private _?: [P1, R, E, RO, _EM];
@@ -371,7 +382,7 @@ export function isNotificationMessage(message: Message | undefined): message is 
 /**
  * Tests if the given message is a response message
  */
-export function isReponseMessage(message: Message | undefined): message is ResponseMessage {
+export function isResponseMessage(message: Message | undefined): message is ResponseMessage {
 	let candidate = <ResponseMessage>message;
 	return candidate && (candidate.result !== void 0 || !!candidate.error) && (is.string(candidate.id) || is.number(candidate.id) || candidate.id === null);
 }
