@@ -446,6 +446,7 @@ export interface Middleware {
 }
 
 export interface LanguageClientOptions {
+	rootUri?: Uri;
 	documentSelector?: DocumentSelector | string[];
 	synchronize?: SynchronizeOptions;
 	diagnosticCollectionName?: string;
@@ -467,6 +468,7 @@ export interface LanguageClientOptions {
 }
 
 interface ResolvedClientOptions {
+	rootUri?: Uri;
 	documentSelector?: DocumentSelector;
 	synchronize: SynchronizeOptions;
 	diagnosticCollectionName?: string;
@@ -1086,6 +1088,7 @@ export abstract class BaseLanguageClient {
 
 		clientOptions = clientOptions || {};
 		this._clientOptions = {
+			rootUri: clientOptions.rootUri || (Workspace.workspaceFolders && Workspace.workspaceFolders[0] ? Workspace.workspaceFolders[0].uri : undefined),
 			documentSelector: clientOptions.documentSelector || [],
 			synchronize: clientOptions.synchronize || {},
 			diagnosticCollectionName: clientOptions.diagnosticCollectionName,
@@ -1436,8 +1439,8 @@ export abstract class BaseLanguageClient {
 		let initOption = this._clientOptions.initializationOptions;
 		let initParams: InitializeParams = {
 			processId: process.pid,
-			rootPath: Workspace.rootPath ? this._c2p.asUri(Uri.parse(Workspace.rootPath)) : null,
-			rootUri: Workspace.rootPath ? this._c2p.asUri(Uri.parse(Workspace.rootPath)) : null,
+			rootPath: this._clientOptions.rootUri && this._clientOptions.rootUri.scheme === 'file' ? this._clientOptions.rootUri.fsPath : null,
+			rootUri: this._clientOptions.rootUri ? this._c2p.asUri(this._clientOptions.rootUri) : null,
 			capabilities: clientCapabilities,
 			initializationOptions: is.func(initOption) ? initOption() : initOption,
 			trace: Trace.toString(this._trace)
